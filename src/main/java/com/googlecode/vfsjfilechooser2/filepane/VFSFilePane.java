@@ -243,117 +243,36 @@ public final class VFSFilePane extends JPanel implements PropertyChangeListener
     protected Action newFolderAction;
     private Handler handler;
 
-    // details view
-    @SuppressWarnings("unused")
-    private final transient KeyListener detailsKeyListener = new KeyAdapter()
+    private final transient KeyListener NavKeyListener = new KeyAdapter()
         {
-            private final long timeFactor;
-            private final StringBuilder typedString = new StringBuilder();
-            private long lastTime = 1000L;
-
-            {
-                Long l = (Long) UIManager.get("Table.timeFactor");
-                timeFactor = (l != null) ? l : 1000L;
-            }
-
-            /**
-             * Moves the keyboard focus to the first element whose prefix matches
-             * the sequence of alphanumeric keys pressed by the user with delay
-             * less than value of <code>timeFactor</code>. Subsequent same key
-             * presses move the keyboard focus to the next object that starts with
-             * the same letter until another key is pressed, then it is treated
-             * as the prefix with appropriate number of the same letters followed
-             * by first typed another letter.
-             */
             @Override
             public void keyTyped(KeyEvent e)
             {
-                BasicVFSDirectoryModel model = getModel();
-                int rowCount = model.getSize();
+                switch (e.getKeyChar()) {
+                    case '\b':
+                        fileChooserUIAccessor.getChangeToParentDirectoryAction().actionPerformed(null);
+                        break;
+                    case '\n':
+                        VFSJFileChooser fc = getFileChooser();
+                        int index = listSelectionModel.getLeadSelectionIndex();
+                        if (index >= 0)
+                        {
+                            FileObject f = (FileObject) list.getModel().getElementAt(index);
 
-                if ((detailsTable == null) || (rowCount == 0) || e.isAltDown() ||
-                        e.isControlDown() || e.isMetaDown())
-                {
-                    return;
+                            if (fc.getFileSelectionMode() == VFSJFileChooser.SELECTION_MODE.FILES_ONLY.FILES_ONLY && getFileChooser().isTraversable(f))
+                            {
+                                list.clearSelection();
+                                fc.setCurrentDirectoryObject(f);
+                            }
+                            else {
+                                fc.approveSelection();
+                            }
+                        }
+                        break;
+                    case 27:
+                        getFileChooser().cancelSelection();
+                        break;
                 }
-
-                InputMap inputMap = detailsTable.getInputMap(JComponent.WHEN_ANCESTOR_OF_FOCUSED_COMPONENT);
-                KeyStroke key = KeyStroke.getKeyStrokeForEvent(e);
-
-                if ((inputMap != null) && (inputMap.get(key) != null))
-                {
-                    return;
-                }
-
-                int startIndex = detailsTable.getSelectionModel()
-                                             .getLeadSelectionIndex();
-
-                if (startIndex < 0)
-                {
-                    startIndex = 0;
-                }
-
-                if (startIndex >= rowCount)
-                {
-                    startIndex = rowCount - 1;
-                }
-
-                char c = e.getKeyChar();
-
-                long time = e.getWhen();
-
-                if ((time - lastTime) < timeFactor)
-                {
-                    if ((typedString.length() == 1) &&
-                            (typedString.charAt(0) == c))
-                    {
-                        // Subsequent same key presses move the keyboard focus to the next
-                        // object that starts with the same letter.
-                        startIndex++;
-                    }
-                    else
-                    {
-                        typedString.append(c);
-                    }
-                }
-                else
-                {
-                    startIndex++;
-
-                    typedString.setLength(0);
-                    typedString.append(c);
-                }
-
-                lastTime = time;
-
-                if (startIndex >= rowCount)
-                {
-                    startIndex = 0;
-                }
-
-                // Find next file 
-                int index = getNextMatch(startIndex, rowCount - 1);
-
-                if ((index < 0) && (startIndex > 0))
-                { // wrap
-                    index = getNextMatch(0, startIndex - 1);
-                }
-
-                if (index >= 0)
-                {
-                    detailsTable.getSelectionModel()
-                                .setSelectionInterval(index, index);
-
-                    Rectangle cellRect = detailsTable.getCellRect(index,
-                            detailsTable.convertColumnIndexToView(
-                                COLUMN_FILENAME), false);
-                    detailsTable.scrollRectToVisible(cellRect);
-                }
-            }
-
-            private int getNextMatch(int startIndex, int finishIndex)
-            {
-                return -1;
             }
         };
 
@@ -841,8 +760,42 @@ public final class VFSFilePane extends JPanel implements PropertyChangeListener
 
         aList.setModel(getModel());
 
+        final VFSJFileChooser chooser = getFileChooser();
+        final JTable detailsTable = new JTable(getDetailsTableModel())
+            {
+                // Handle Escape key events here
+                @Override
+                protected boolean processKeyBinding(KeyStroke ks, KeyEvent e,
+                    int condition, boolean pressed)
+                {
+                    if ((e.getKeyCode() == KeyEvent.VK_ESCAPE) &&
+                            (getCellEditor() == null))
+                    {
+                        // We are not editing, forward to filechooser.
+                        chooser.dispatchEvent(e);
+
+                        return true;
+                    }
+
+                    return super.processKeyBinding(ks, e, condition, pressed);
+                }
+
+                @Override
+                public void tableChanged(TableModelEvent e)
+                {
+                    super.tableChanged(e);
+
+                    if (e.getFirstRow() == TableModelEvent.HEADER_ROW)
+                    {
+                        // update header with possibly changed column set
+                        updateDetailsColumnModel(this);
+                    }
+                }
+            };
+
         aList.addListSelectionListener(createListSelectionListener());
         aList.addMouseListener(getMouseHandler());
+        aList.addKeyListener(NavKeyListener);
 
         JScrollPane scrollpane = new JScrollPane(aList);
 
@@ -1638,7 +1591,7 @@ public final class VFSFilePane extends JPanel implements PropertyChangeListener
         detailsTable.setShowGrid(false);
         detailsTable.putClientProperty("JTable.autoStartsEdit", Boolean.FALSE);
 
-        //        detailsTable.addKeyListener(detailsKeyListener);
+        detailsTable.addKeyListener(NavKeyListener);
         Font font = list.getFont();
         detailsTable.setFont(font);
         detailsTable.setIntercellSpacing(new Dimension(0, 0));
@@ -2067,7 +2020,7 @@ public final class VFSFilePane extends JPanel implements PropertyChangeListener
                 if ((evt.getClickCount() == 1) && source instanceof JList)
                 {
                     if ((!fc.isMultiSelectionEnabled() ||
-                            (fc.getSelectedFiles().length <= 1)) &&
+                            (fc.getSelectedFileObjects().length <= 1)) &&
                             (index >= 0) &&
                             listSelectionModel.isSelectedIndex(index) &&
                             (getEditIndex() == index) && (editFile == null))

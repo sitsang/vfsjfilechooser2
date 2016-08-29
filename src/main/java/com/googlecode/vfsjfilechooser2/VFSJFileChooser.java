@@ -188,10 +188,10 @@ public class VFSJFileChooser extends JComponent implements Accessible
      * @param currentDirectory  a <code>File</code> object specifying
      *                          the path to a file or directory
      */
-    public VFSJFileChooser(File currentDirectory)
+    /*public VFSJFileChooser(File currentDirectory)
     {
       this(VFSUtils.toFileObject(currentDirectory));
-    }
+    }*/
 
     /**
      * Constructs a <code>VFSJFileChooser</code> using the given <code>File</code>
