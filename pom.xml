@@ -171,6 +171,7 @@
           </includes>
           <disableXmlReport>true</disableXmlReport>
           <redirectTestOutputToFile>true</redirectTestOutputToFile>
+          <skipTests>true</skipTests>
         </configuration>
       </plugin>
 
@@ -212,6 +213,7 @@
         <configuration>
           <show>protected</show>
           <nohelp>true</nohelp>
+          <failOnError>false</failOnError>
         </configuration>
       </plugin>
 
